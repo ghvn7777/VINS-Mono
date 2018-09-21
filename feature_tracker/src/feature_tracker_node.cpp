@@ -27,18 +27,17 @@ bool init_pub = 0;
 
 void img_callback(const sensor_msgs::ImageConstPtr &img_msg)
 {
-    if(first_image_flag)
-    {
+    if(first_image_flag) {
         first_image_flag = false;
         first_image_time = img_msg->header.stamp.toSec();
         last_image_time = img_msg->header.stamp.toSec();
         return;
     }
     // detect unstable camera stream
-    if (img_msg->header.stamp.toSec() - last_image_time > 1.0 || img_msg->header.stamp.toSec() < last_image_time)
-    {
+    if (img_msg->header.stamp.toSec() - last_image_time > 1.0 ||
+        img_msg->header.stamp.toSec() < last_image_time) {
         ROS_WARN("image discontinue! reset the feature tracker!");
-        first_image_flag = true; 
+        first_image_flag = true;
         last_image_time = 0;
         pub_count = 1;
         std_msgs::Bool restart_flag;
@@ -47,23 +46,20 @@ void img_callback(const sensor_msgs::ImageConstPtr &img_msg)
         return;
     }
     last_image_time = img_msg->header.stamp.toSec();
-    // frequency control
-    if (round(1.0 * pub_count / (img_msg->header.stamp.toSec() - first_image_time)) <= FREQ)
-    {
+    // 频率达不到指定频率时候才发布此帧
+    if (round(1.0 * pub_count / (img_msg->header.stamp.toSec() - first_image_time)) <= FREQ) {
         PUB_THIS_FRAME = true;
-        // reset the frequency control
-        if (abs(1.0 * pub_count / (img_msg->header.stamp.toSec() - first_image_time) - FREQ) < 0.01 * FREQ)
-        {
+        // reset the frequency control，当频率和发布频率差不多的时候，重新计时
+        if (abs(1.0 * pub_count / (img_msg->header.stamp.toSec() - first_image_time) - FREQ) < 0.01 * FREQ) {
             first_image_time = img_msg->header.stamp.toSec();
             pub_count = 0;
         }
-    }
-    else
+    } else {
         PUB_THIS_FRAME = false;
+    }
 
     cv_bridge::CvImageConstPtr ptr;
-    if (img_msg->encoding == "8UC1")
-    {
+    if (img_msg->encoding == "8UC1") {
         sensor_msgs::Image img;
         img.header = img_msg->header;
         img.height = img_msg->height;
@@ -73,9 +69,9 @@ void img_callback(const sensor_msgs::ImageConstPtr &img_msg)
         img.data = img_msg->data;
         img.encoding = "mono8";
         ptr = cv_bridge::toCvCopy(img, sensor_msgs::image_encodings::MONO8);
-    }
-    else
+    } else {
         ptr = cv_bridge::toCvCopy(img_msg, sensor_msgs::image_encodings::MONO8);
+    }
 
     cv::Mat show_img = ptr->image;
     TicToc t_r;
