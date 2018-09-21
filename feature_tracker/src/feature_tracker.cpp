@@ -33,13 +33,12 @@ FeatureTracker::FeatureTracker()
 {
 }
 
-void FeatureTracker::setMask()
-{
-    if(FISHEYE)
+void FeatureTracker::setMask() {
+    if(FISHEYE) {
         mask = fisheye_mask.clone();
-    else
+    } else {
         mask = cv::Mat(ROW, COL, CV_8UC1, cv::Scalar(255));
-
+    }
 
     // prefer to keep features that are tracked for long time
     vector<pair<int, pair<cv::Point2f, int>>> cnt_pts_id;
@@ -47,8 +46,9 @@ void FeatureTracker::setMask()
     for (unsigned int i = 0; i < forw_pts.size(); i++)
         cnt_pts_id.push_back(make_pair(track_cnt[i], make_pair(forw_pts[i], ids[i])));
 
-    sort(cnt_pts_id.begin(), cnt_pts_id.end(), [](const pair<int, pair<cv::Point2f, int>> &a, const pair<int, pair<cv::Point2f, int>> &b)
-         {
+    sort(cnt_pts_id.begin(), cnt_pts_id.end(),
+         [](const pair<int, pair<cv::Point2f, int>> &a,
+            const pair<int, pair<cv::Point2f, int>> &b) {
             return a.first > b.first;
          });
 
@@ -68,10 +68,8 @@ void FeatureTracker::setMask()
     }
 }
 
-void FeatureTracker::addPoints()
-{
-    for (auto &p : n_pts)
-    {
+void FeatureTracker::addPoints() {
+    for (auto &p : n_pts) {
         forw_pts.push_back(p);
         ids.push_back(-1);
         track_cnt.push_back(1);
@@ -83,7 +81,7 @@ void FeatureTracker::readImage(const cv::Mat &_img, double _cur_time) {
     TicToc t_r;
     cur_time = _cur_time;
 
-    if (EQUALIZE) {
+    if (EQUALIZE) { // 直方图自适应均衡化
         cv::Ptr<cv::CLAHE> clahe = cv::createCLAHE(3.0, cv::Size(8, 8));
         TicToc t_c;
         clahe->apply(_img, img);
@@ -93,8 +91,9 @@ void FeatureTracker::readImage(const cv::Mat &_img, double _cur_time) {
     }
 
     // forw_img: 当前图像帧
-    // prev_img:
-    // cur_img:
+    // prev_img: 上一次发布的帧
+    // cur_img : 上一帧
+    // forw_pts, prev_pts, cur_pts: 对应特征点
     if (forw_img.empty()) {
         prev_img = cur_img = forw_img = img;
     } else {
@@ -103,58 +102,60 @@ void FeatureTracker::readImage(const cv::Mat &_img, double _cur_time) {
 
     forw_pts.clear();
 
-    if (cur_pts.size() > 0)
-    {
+    if (cur_pts.size() > 0) {
         TicToc t_o;
         vector<uchar> status;
         vector<float> err;
+        // 光流法算两帧之间的匹配特征点
         cv::calcOpticalFlowPyrLK(cur_img, forw_img, cur_pts, forw_pts, status, err, cv::Size(21, 21), 3);
 
         for (int i = 0; i < int(forw_pts.size()); i++)
-            if (status[i] && !inBorder(forw_pts[i]))
+            if (status[i] && !inBorder(forw_pts[i])) // 检查该特征点的合法性
                 status[i] = 0;
-        reduceVector(prev_pts, status);
+        reduceVector(prev_pts, status); // 保留符合要求的特征点
         reduceVector(cur_pts, status);
         reduceVector(forw_pts, status);
         reduceVector(ids, status);
         reduceVector(cur_un_pts, status);
-        reduceVector(track_cnt, status);
+        reduceVector(track_cnt, status); // 特征点跟踪的次数
         ROS_DEBUG("temporal optical flow costs: %fms", t_o.toc());
     }
 
-    for (auto &n : track_cnt)
+    for (auto &n : track_cnt) {
         n++;
+    }
 
-    if (PUB_THIS_FRAME)
-    {
-        rejectWithF();
+    if (PUB_THIS_FRAME) {
+        rejectWithF(); // 去除异常值
         ROS_DEBUG("set mask begins");
         TicToc t_m;
-        setMask();
+        setMask(); // 特征点按照跟踪到的次数排序，并以此按照跟踪次数多少选点（每个点选完，附近就不会再选别的点）
         ROS_DEBUG("set mask costs %fms", t_m.toc());
 
         ROS_DEBUG("detect feature begins");
         TicToc t_t;
         int n_max_cnt = MAX_CNT - static_cast<int>(forw_pts.size());
-        if (n_max_cnt > 0)
-        {
+        if (n_max_cnt > 0) {
             if(mask.empty())
                 cout << "mask is empty " << endl;
             if (mask.type() != CV_8UC1)
                 cout << "mask type wrong " << endl;
             if (mask.size() != forw_img.size())
                 cout << "wrong size " << endl;
+            // 在mask中不为0的区域,调用goodFeaturesToTrack提取新的角点n_pts,
             cv::goodFeaturesToTrack(forw_img, n_pts, MAX_CNT - forw_pts.size(), 0.01, MIN_DIST, mask);
-        }
-        else
+        } else {
             n_pts.clear();
+        }
         ROS_DEBUG("detect feature costs: %fms", t_t.toc());
 
         ROS_DEBUG("add feature begins");
         TicToc t_a;
+        // 通过addPoints()函数push到forw_pts中, id初始化 -1, track_cnt 初始化为1.
         addPoints();
         ROS_DEBUG("selectFeature costs: %fms", t_a.toc());
     }
+
     prev_img = cur_img;
     prev_pts = cur_pts;
     prev_un_pts = cur_un_pts;
@@ -164,15 +165,12 @@ void FeatureTracker::readImage(const cv::Mat &_img, double _cur_time) {
     prev_time = cur_time;
 }
 
-void FeatureTracker::rejectWithF()
-{
-    if (forw_pts.size() >= 8)
-    {
+void FeatureTracker::rejectWithF() {
+    if (forw_pts.size() >= 8) {
         ROS_DEBUG("FM ransac begins");
         TicToc t_f;
         vector<cv::Point2f> un_cur_pts(cur_pts.size()), un_forw_pts(forw_pts.size());
-        for (unsigned int i = 0; i < cur_pts.size(); i++)
-        {
+        for (unsigned int i = 0; i < cur_pts.size(); i++) {
             Eigen::Vector3d tmp_p;
             m_camera->liftProjective(Eigen::Vector2d(cur_pts[i].x, cur_pts[i].y), tmp_p);
             tmp_p.x() = FOCAL_LENGTH * tmp_p.x() / tmp_p.z() + COL / 2.0;
