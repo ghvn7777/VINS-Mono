@@ -39,7 +39,7 @@ void FeatureTracker::setMask()
         mask = fisheye_mask.clone();
     else
         mask = cv::Mat(ROW, COL, CV_8UC1, cv::Scalar(255));
-    
+
 
     // prefer to keep features that are tracked for long time
     vector<pair<int, pair<cv::Point2f, int>>> cnt_pts_id;
@@ -78,28 +78,26 @@ void FeatureTracker::addPoints()
     }
 }
 
-void FeatureTracker::readImage(const cv::Mat &_img, double _cur_time)
-{
+void FeatureTracker::readImage(const cv::Mat &_img, double _cur_time) {
     cv::Mat img;
     TicToc t_r;
     cur_time = _cur_time;
 
-    if (EQUALIZE)
-    {
+    if (EQUALIZE) {
         cv::Ptr<cv::CLAHE> clahe = cv::createCLAHE(3.0, cv::Size(8, 8));
         TicToc t_c;
         clahe->apply(_img, img);
         ROS_DEBUG("CLAHE costs: %fms", t_c.toc());
-    }
-    else
+    } else {
         img = _img;
-
-    if (forw_img.empty())
-    {
-        prev_img = cur_img = forw_img = img;
     }
-    else
-    {
+
+    // forw_img: 当前图像帧
+    // prev_img:
+    // cur_img:
+    if (forw_img.empty()) {
+        prev_img = cur_img = forw_img = img;
+    } else {
         forw_img = img;
     }
 

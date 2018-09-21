@@ -74,21 +74,18 @@ void img_callback(const sensor_msgs::ImageConstPtr &img_msg)
     }
 
     cv::Mat show_img = ptr->image;
-    TicToc t_r;
-    for (int i = 0; i < NUM_OF_CAM; i++)
-    {
+    TicToc t_r; // 记录时间间隔的类
+    for (int i = 0; i < NUM_OF_CAM; i++) { // 几个相机，双目可能会传回来两个 rgb 图像
         ROS_DEBUG("processing camera %d", i);
-        if (i != 1 || !STEREO_TRACK)
+        if (i != 1 || !STEREO_TRACK) { // STEREO_TRACK 默认是 false，单目相机
             trackerData[i].readImage(ptr->image.rowRange(ROW * i, ROW * (i + 1)), img_msg->header.stamp.toSec());
-        else
-        {
-            if (EQUALIZE)
-            {
+        } else {
+            if (EQUALIZE) { // 是否需要做直方图均衡化
                 cv::Ptr<cv::CLAHE> clahe = cv::createCLAHE();
                 clahe->apply(ptr->image.rowRange(ROW * i, ROW * (i + 1)), trackerData[i].cur_img);
-            }
-            else
+            } else {
                 trackerData[i].cur_img = ptr->image.rowRange(ROW * i, ROW * (i + 1));
+            }
         }
 
 #if SHOW_UNDISTORTION
